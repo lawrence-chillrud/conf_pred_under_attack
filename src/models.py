@@ -2,7 +2,6 @@
 # Author: Lawrence Chillrud <chili@u.northwestern.edu>
 # Date: 03/11/2023
 # Description: Models defined here
-
 import tensorflow as tf
 from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2B0
 from tensorflow.keras.layers import GlobalAveragePooling2D, Dropout, Dense
