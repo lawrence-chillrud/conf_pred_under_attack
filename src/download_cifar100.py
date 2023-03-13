@@ -47,10 +47,3 @@ def download_cifar100_as_ds(train_split=0.78, cal_split=0.02, val_split=0.2, shu
     val_ds = train_cal_val_ds.skip(train_size + cal_size)
     
     return train_ds, cal_ds, val_ds, test_ds
-
-# one hot encode labels
-# y_train = tf.one_hot(y_train, depth=y_train.max() + 1, dtype=tf.float64)
-# y_val = tf.one_hot(y_val, depth=y_val.max() + 1, dtype=tf.float64)
-
-# y_train = tf.squeeze(y_train)
-# y_val = tf.squeeze(y_val)

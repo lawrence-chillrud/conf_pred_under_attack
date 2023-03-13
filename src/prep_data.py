@@ -5,6 +5,7 @@
 import tensorflow as tf
 
 def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, cache=False):
+
     def preprocess(x):
         # normalize
         x = tf.cast(x, tf.float16)
@@ -14,7 +15,7 @@ def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, cache=False):
         x = tf.image.resize(x, size=[224, 224], method='bilinear')
         x = tf.cast(x, tf.float16)
         return x
-
+    
     def aug_mirror(x):
         return tf.image.random_flip_left_right(x)
 
@@ -23,9 +24,13 @@ def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, cache=False):
         return tf.image.random_crop(y, tf.shape(x))
 
     # Prep training data
-    train_ds = train_ds.map(lambda x, y: (preprocess(aug_shift(aug_mirror(x))), y)).batch(batch_size)
-    cal_ds = cal_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
-    val_ds = val_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
-    test_ds = test_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
+    if train_ds is not None:
+        train_ds = train_ds.map(lambda x, y: (preprocess(aug_shift(aug_mirror(x))), y)).batch(batch_size)
+    if cal_ds is not None:
+        cal_ds = cal_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
+    if val_ds is not None:
+        val_ds = val_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
+    if test_ds is not None:
+        test_ds = test_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
     
     return train_ds, cal_ds, val_ds, test_ds
