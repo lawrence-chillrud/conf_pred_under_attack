@@ -4,7 +4,7 @@
 # Description: Prep CIFAR-100 datasets
 import tensorflow as tf
 
-def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, prefetch=16, cache=True):
+def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, cache=False):
     def preprocess(x):
         # normalize
         x = tf.cast(x, tf.float16)
@@ -23,14 +23,9 @@ def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, prefetch=16, cach
         return tf.image.random_crop(y, tf.shape(x))
 
     # Prep training data
-    train_ds = train_ds.map(lambda x, y: (preprocess(aug_shift(aug_mirror(x))), y)).batch(batch_size).prefetch(prefetch)
-    cal_ds = cal_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size).prefetch(prefetch)
-    val_ds = val_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size).prefetch(prefetch)
-    test_ds = test_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size).prefetch(prefetch)
-    if cache:
-        train_ds = train_ds.cache()
-        cal_ds = cal_ds.cache()
-        val_ds = val_ds.cache()
-        test_ds = test_ds.cache()
+    train_ds = train_ds.map(lambda x, y: (preprocess(aug_shift(aug_mirror(x))), y)).batch(batch_size)
+    cal_ds = cal_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
+    val_ds = val_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
+    test_ds = test_ds.map(lambda x, y: (preprocess(x), y)).batch(batch_size)
     
     return train_ds, cal_ds, val_ds, test_ds

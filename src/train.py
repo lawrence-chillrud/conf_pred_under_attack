@@ -10,25 +10,32 @@ from models import init_model
 import tensorflow as tf
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras.optimizers import Adam
+import pandas as pd
+import numpy as np
+import os
+
+# Hyperparameters
+EPOCHS = 20
+BATCH_SIZE = 32 # was 128
+ALPHA = 1e-3 # was 1e-4
+OUTPUT_DIR = f'/home/lawrence/conf_pred_under_attack/output/models/effnetv2b0_bs{BATCH_SIZE}_lr{ALPHA}'
+if not os.path.isdir(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+
 # %%
 # Load CIFAR-100
 train_ds, cal_ds, val_ds, test_ds = download_cifar100_as_ds()
 
 # Prep CIFAR-100
-train_ds, cal_ds, val_ds, test_ds = prep_data(train_ds, cal_ds, val_ds, test_ds)
-
-# %%
-# Set GPU
-gpus_available = tf.config.list_physical_devices('GPU')
-if gpus_available: tf.config.set_visible_devices(gpus_available[5], 'GPU')
+train_ds, cal_ds, val_ds, test_ds = prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=BATCH_SIZE)
 
 # %%
 # Initialize Model
-model = init_model()
+model = init_model(freeze_base=False)
+print(model.summary())
 
 # Set optimizer
 model.compile(
-    optimizer=Adam(lr=1e-3),
+    optimizer=Adam(lr=ALPHA),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -45,8 +52,14 @@ rlrop = ReduceLROnPlateau(monitor='val_loss', mode='min', patience=5, factor=0.5
 hist = model.fit(
     train_ds, 
     validation_data=val_ds, 
-    epochs=20, 
+    epochs=EPOCHS, 
     callbacks=[early_stop, rlrop]
 )
 
 # %%
+# Save model
+model.save_weights(f'{OUTPUT_DIR}/weights.h5')
+df = pd.DataFrame.from_dict(hist.history)
+df['epoch'] = np.arange(1, df.shape[0] + 1)
+df.to_csv(f'{OUTPUT_DIR}/training_history.csv')
+print(f"Complete. Saved results to: {OUTPUT_DIR}")
