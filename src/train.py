@@ -15,7 +15,7 @@ import numpy as np
 import os
 
 # Hyperparameters
-EPOCHS = 20
+EPOCHS = 50
 BATCH_SIZE = 32 # was 128
 ALPHA = 1e-3 # was 1e-4
 OUTPUT_DIR = f'/home/lawrence/conf_pred_under_attack/output/models/effnetv2b0_bs{BATCH_SIZE}_lr{ALPHA}'
@@ -45,7 +45,7 @@ model.compile(
 early_stop = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=10, restore_best_weights=True)
 
 # reducing learning rate on plateau
-rlrop = ReduceLROnPlateau(monitor='val_loss', mode='min', patience=5, factor=0.5, min_lr=1e-6, verbose=1)
+rlrop = ReduceLROnPlateau(monitor='val_loss', mode='min', patience=3, factor=0.1, min_lr=1e-6, verbose=1)
 
 # %%
 # Train the model on the CIFAR-100 dataset
