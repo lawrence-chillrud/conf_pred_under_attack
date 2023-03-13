@@ -1,5 +1,5 @@
 # File: conformal_prediction.py
-# Author: Adapted by Lawrence Chillrud <chili@u.northwestern.edu>, originally written by Anastasios Angelopoulos <angelopoulos@berkeley.edu>
+# Author: Adapted by Lawrence Chillrud <chili@u.northwestern.edu> from code originally written by Anastasios Angelopoulos <angelopoulos@berkeley.edu>
 # Date: 03/13/2023
 # Description: Implement RAPS conformal prediction as detailed by Angelopoulos et al.
 # Link to original code: <https://github.com/aangelopoulos/conformal-prediction/blob/main/notebooks/imagenet-raps.ipynb>
@@ -11,9 +11,9 @@ def RAPS_conformal_prediction(cal_smx, cal_labels, val_smx, val_labels, n_classe
     cal_srt = np.take_along_axis(cal_smx,cal_pi,axis=1)
     cal_srt_reg = cal_srt + reg_vec
     cal_L = np.where(cal_pi == cal_labels[:,None])[1]
-    cal_scores = cal_srt_reg.cumsum(axis=1)[np.arange(n),cal_L] - np.random.rand(n)*cal_srt_reg[np.arange(n),cal_L]
+    cal_scores = cal_srt_reg.cumsum(axis=1)[np.arange(n_cal),cal_L] - np.random.rand(n_cal)*cal_srt_reg[np.arange(n_cal),cal_L]
     # Get the score quantile
-    qhat = np.quantile(cal_scores, np.ceil((n+1)*(1-alpha))/n, interpolation='higher')
+    qhat = np.quantile(cal_scores, np.ceil((n_cal+1)*(1-alpha))/n_cal, interpolation='higher')
     # Deploy
     n_val = val_smx.shape[0]
     val_pi = val_smx.argsort(1)[:,::-1]
