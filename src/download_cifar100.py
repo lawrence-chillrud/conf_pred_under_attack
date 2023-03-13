@@ -31,8 +31,7 @@ def download_cifar100_as_numpy(train_cal_size=0.8, cal_len=1000, seed=0, normali
 def download_cifar100_as_ds(train_split=0.78, cal_split=0.02, val_split=0.2, shuffle=True, seed=0):
     assert train_split + cal_split + val_split == 1
 
-    # _ is metadata
-    ds, _ = tfds.load("cifar100", with_info=True, as_supervised=True)
+    ds, info = tfds.load("cifar100", with_info=True, as_supervised=True)
     train_cal_val_ds = ds['train']
     test_ds = ds['test']
 
@@ -46,4 +45,4 @@ def download_cifar100_as_ds(train_split=0.78, cal_split=0.02, val_split=0.2, shu
     cal_ds = train_cal_val_ds.skip(train_size).take(cal_size)
     val_ds = train_cal_val_ds.skip(train_size + cal_size)
     
-    return train_ds, cal_ds, val_ds, test_ds
+    return train_ds, cal_ds, val_ds, test_ds, info.features['label'].names

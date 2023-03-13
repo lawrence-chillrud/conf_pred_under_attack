@@ -23,7 +23,7 @@ if not os.path.isdir(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 
 # %%
 # Load CIFAR-100
-train_ds, cal_ds, val_ds, test_ds = download_cifar100_as_ds()
+train_ds, cal_ds, val_ds, test_ds, _ = download_cifar100_as_ds()
 
 # Prep CIFAR-100
 train_ds, cal_ds, val_ds, test_ds = prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=BATCH_SIZE)
