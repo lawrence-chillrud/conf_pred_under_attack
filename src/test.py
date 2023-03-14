@@ -304,7 +304,7 @@ def plot_random_sample(
 
     ds = tf.data.Dataset.zip((test_ds, fgsm_ds, pgd_ds))
 
-    fig, ax = plt.subplots(nrows=n_examples, ncols=3, figsize=(12, 8), gridspec_kw={'width_ratios': [1, 1, 1], 'height_ratios': np.ones(n_examples, int).tolist()})
+    fig, ax = plt.subplots(nrows=n_examples, ncols=3, figsize=(20, 8))#, gridspec_kw={'width_ratios': [1, 1, 1], 'height_ratios': np.ones(n_examples, int).tolist()})
     for i, (og_sample, fgsm_sample, pgd_sample) in enumerate(ds):
         og_img, og_label = og_sample[0].numpy(), og_sample[1].numpy()
         fgsm_img = fgsm_sample[0].numpy()
@@ -321,13 +321,13 @@ def plot_random_sample(
 
         fgsm_idx = fgsm_p[i, :]
         fgsm_pred_set = hrl[fgsm_idx]
-        fgsm_s = np.round(fgsm_s[i, :][fgsm_idx], 2)
-        fgsm_dict = dict(zip(fgsm_pred_set, fgsm_s))
+        fgsm_sm = np.round(fgsm_s[i, :][fgsm_idx], 2)
+        fgsm_dict = dict(zip(fgsm_pred_set, fgsm_sm))
 
         pgd_idx = pgd_p[i, :]
         pgd_pred_set = hrl[pgd_idx]
-        pgd_s = np.round(pgd_s[i, :][pgd_idx], 2)
-        pgd_dict = dict(zip(pgd_pred_set, pgd_s))
+        pgd_sm = np.round(pgd_s[i, :][pgd_idx], 2)
+        pgd_dict = dict(zip(pgd_pred_set, pgd_sm))
 
         # Loop over each column in the row
         ax[i, 0].imshow(og_img)
