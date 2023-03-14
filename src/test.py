@@ -9,18 +9,20 @@ from models import *
 from keras.optimizers import Adam
 from extract_softmax_scores import extract_softmax_scores
 import pandas as pd
-from collections import OrderedDict
+from easydict import EasyDict
 import matplotlib.pyplot as plt
 from reliability_diagrams import *
 from conformal_prediction import RAPS_conformal_prediction
 from cleverhans.tf2.attacks.projected_gradient_descent import projected_gradient_descent
 from cleverhans.tf2.attacks.fast_gradient_method import fast_gradient_method
 import tensorflow as tf
+import seaborn as sns
 
 # Hyperparameters
 BATCH_SIZE = 32 # was 128
 ALPHA = 1e-3 # was 1e-4
 OUTPUT_DIR = f'/home/lawrence/conf_pred_under_attack/output/models/effnetv2b0_bs{BATCH_SIZE}_lr{ALPHA}'
+FIG_DIR = f'/home/lawrence/conf_pred_under_attack/output/figures'
 
 # Load and prep CIFAR-100
 train_ds, cal_ds, val_ds, test_ds, human_readable_labels = download_cifar100_as_ds()
@@ -33,30 +35,17 @@ print(model.summary())
 model.compile(optimizer=Adam(lr=ALPHA), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 # %%
-# Calibration set performance
-loss, acc = model.evaluate(cal_ds)
-print(f'Calibration set performance: loss {loss}, accuracy {acc}')
+print("Obtaining result block 1... (4 progress bars should show here)")
+for (ds_tag, ds) in zip(['Training', 'Validation', 'Calibration', 'Testing'], [train_ds, val_ds, cal_ds, test_ds]):
+    loss, acc = model.evaluate(ds)
+    print(f"{ds_tag} set performance: loss {loss}, accuracy {acc}")
 
 # %%
-# Test performance
-loss, acc = model.evaluate(test_ds)
-print(f'Test set performance: loss {loss}, accuracy {acc}')
+print("Obtaining result block 2...")
 
-# %%
-# Extract softmax scores and labels from cal and test datasets
+# Extract softmax scores and labels from cal and test dataset
 cal_smx, cal_labels_dict = extract_softmax_scores(model, cal_ds)
-cal_df = pd.DataFrame.from_dict(cal_labels_dict)
-
 test_smx, test_labels_dict = extract_softmax_scores(model, test_ds)
-test_df = pd.DataFrame.from_dict(test_labels_dict)
-
-# %%
-# Extract softmax scores and labels from val and train datasets
-val_smx, val_labels_dict = extract_softmax_scores(model, val_ds)
-val_df = pd.DataFrame.from_dict(val_labels_dict)
-
-train_smx, train_labels_dict = extract_softmax_scores(model, train_ds)
-train_df = pd.DataFrame.from_dict(train_labels_dict)
 
 # %%
 plt.style.use("seaborn")
@@ -66,14 +55,15 @@ plt.rc("xtick", labelsize=12)
 plt.rc("ytick", labelsize=12)
 plt.rc("legend", fontsize=12)
 
-reliability_diagram(
+test_calib_fig = reliability_diagram(
     test_labels_dict['true_labels'], 
     test_labels_dict['pred_labels'], 
     test_labels_dict['confidences'],
     num_bins=10, draw_ece=True,
     draw_bin_importance="alpha", draw_averages=True,
-    title='Unperturbed test set performance (no conformal prediction)', figsize=(6, 6), dpi=100, return_fig=True
+    title='Unperturbed test set calibration', figsize=(6, 6), dpi=100, return_fig=True
 )
+test_calib_fig.savefig(f'{FIG_DIR}/baseline_unperturbed_testset_performance.png', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
 
 # %%
 empirical_coverage, qhat, prediction_sets = RAPS_conformal_prediction(
@@ -82,21 +72,45 @@ empirical_coverage, qhat, prediction_sets = RAPS_conformal_prediction(
     lam_reg=0.01, k_reg=5, rand=False
 )
 
-def pred_set_sizes_hist(prediction_sets, cov):
+def pred_set_sizes_hist(prediction_sets, cov, fname, title):
     sizes = np.sum(prediction_sets, axis=1)
     bins = np.arange(np.min(sizes), np.max(sizes)+1)
     plt.hist(sizes, bins=bins, edgecolor='black')
     plt.xlabel('RAPS CP prediction set size')
     plt.ylabel('Frequency')
-    plt.title(f'Unperturbed test set empirical coverage: {cov}')
+    plt.title(f'{title} (overall empirical coverage: {cov})')
+    plt.savefig(f'{FIG_DIR}/{fname}', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
     plt.show()
 
-pred_set_sizes_hist(prediction_sets, empirical_coverage)
+pred_set_sizes_hist(
+    prediction_sets, empirical_coverage, 
+    fname='baseline_unperturbed_testset_prediction_set_size_dist.png', 
+    title='RAPS CP prediction set size distribution in the unperturbed test set'
+)
 
-# TODO PLOT IMAGES WITH THEIR PREDICTION SETS
+# %%
+def pred_set_by_conf_scatter(pred_sets, conf, cov, title, fname):
+    pred_set_len = np.sum(pred_sets, axis=1)
+    bp_df = pd.DataFrame(EasyDict(pred_set_len=pred_set_len, conf=conf))
+    boxprops = dict(linewidth=2, color='tab:blue', edgecolor='black')
+    sns.boxplot(x='pred_set_len', y='conf', data=bp_df, boxprops=boxprops)
+    sns.stripplot(x='pred_set_len', y='conf', data=bp_df, color='tab:orange', edgecolor='black', alpha=0.5, size=4, jitter=0.3)
+    plt.title(f'{title} (overall empirical coverage: {cov})')
+    plt.xlabel("Prediction set size")
+    plt.ylabel("Max softmax score (confidence) in prediction set")
+    plt.savefig(f'{FIG_DIR}/{fname}', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
+    plt.show()
+
+pred_set_by_conf_scatter(
+    pred_sets=prediction_sets, conf=test_labels_dict['confidences'], cov=empirical_coverage,
+    title='RAPS CP in the unperturbed test set',
+    fname='baseline_unperturbed_testset_predset_by_conf_scatter.png'
+)
+print(f'Saved plots from results block 2 to {FIG_DIR}')
 
 # %%
 # Construct adversarial attacks
+print("Obtaining result block 3 (this may take a while since we make the adversarial attacks here)...")
 
 # Load in model again for logit output
 logits_model = load_logit_model(f'{OUTPUT_DIR}/weights.h5')
@@ -114,31 +128,42 @@ fgsm_test_ds = test_ds.unbatch().take(BATCH_SIZE*10).map(
 
 # %%
 # PGD attack
-pgd_test_ds = test_ds.map(
+pgd_test_ds = test_ds.unbatch().take(BATCH_SIZE*3).map(
     lambda x, y: (tf.squeeze(projected_gradient_descent(
         logits_model, tf.expand_dims(x, axis=0), 
         eps=0.01, eps_iter=0.01, nb_iter=20,
-        norm=np.inf, loss_fn=loss_fn, targeted=False
+        norm=np.inf, targeted=False
     )), y)
-)
+).batch(BATCH_SIZE)
 
 # %%
 fgsm_test_smx, fgsm_test_labels_dict = extract_softmax_scores(model, fgsm_test_ds)
-fgsm_test_df = pd.DataFrame.from_dict(fgsm_test_labels_dict)
+#fgsm_test_df = pd.DataFrame.from_dict(fgsm_test_labels_dict)
 
 # %%
 pgd_test_smx, pgd_test_labels_dict = extract_softmax_scores(model, pgd_test_ds)
-pgd_test_df = pd.DataFrame.from_dict(pgd_test_labels_dict)
+#pgd_test_df = pd.DataFrame.from_dict(pgd_test_labels_dict)
 
 # %%
-reliability_diagram(
+fgsm_test_calib_fig = reliability_diagram(
     fgsm_test_labels_dict['true_labels'], 
     fgsm_test_labels_dict['pred_labels'], 
     fgsm_test_labels_dict['confidences'],
     num_bins=10, draw_ece=True,
     draw_bin_importance="alpha", draw_averages=True,
-    title='FGSM Adversarial test set performance (no conformal prediction)', figsize=(6, 6), dpi=100, return_fig=True
+    title='FGSM adversarial test set calibration', figsize=(6, 6), dpi=100, return_fig=True
 )
+fgsm_test_calib_fig.savefig(f'{FIG_DIR}/fgsm_testset_performance.png', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
+
+pgd_test_calib_fig = reliability_diagram(
+    pgd_test_labels_dict['true_labels'], 
+    pgd_test_labels_dict['pred_labels'], 
+    pgd_test_labels_dict['confidences'],
+    num_bins=10, draw_ece=True,
+    draw_bin_importance="alpha", draw_averages=True,
+    title='PGD adversarial test set calibration', figsize=(6, 6), dpi=100, return_fig=True
+)
+pgd_test_calib_fig.savefig(f'{FIG_DIR}/pgd_testset_performance.png', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
 
 # %%
 fgsm_empirical_coverage, fgsm_qhat, fgsm_prediction_sets = RAPS_conformal_prediction(
@@ -147,16 +172,65 @@ fgsm_empirical_coverage, fgsm_qhat, fgsm_prediction_sets = RAPS_conformal_predic
     lam_reg=0.01, k_reg=5, rand=False
 )
 
-def pred_set_sizes_hist(prediction_sets, cov):
-    sizes = np.sum(prediction_sets, axis=1)
-    bins = np.arange(np.min(sizes), np.max(sizes)+1)
-    plt.hist(sizes, bins=bins, edgecolor='black')
-    plt.xlabel('RAPS CP prediction set size')
-    plt.ylabel('Frequency')
-    plt.title(f'Unperturbed test set empirical coverage: {cov}')
+pgd_empirical_coverage, pgd_qhat, pgd_prediction_sets = RAPS_conformal_prediction(
+    cal_smx=cal_smx, cal_labels=cal_labels_dict['true_labels'],
+    val_smx=pgd_test_smx, val_labels=pgd_test_labels_dict['true_labels'],
+    lam_reg=0.01, k_reg=5, rand=False
+)
+
+pred_set_sizes_hist(
+    fgsm_prediction_sets, fgsm_empirical_coverage, 
+    fname='fgsm_testset_prediction_set_size_dist.png', 
+    title='RAPS CP prediction set size distribution in the FGSM adversarial test set'
+)
+
+pred_set_sizes_hist(
+    pgd_prediction_sets, pgd_empirical_coverage, 
+    fname='pgd_testset_prediction_set_size_dist.png', 
+    title='RAPS CP prediction set size distribution in the PGD adversarial test set'
+)
+
+pred_set_by_conf_scatter(
+    pred_sets=fgsm_prediction_sets, conf=fgsm_test_labels_dict['confidences'], cov=fgsm_empirical_coverage,
+    title='RAPS CP in the FGSM adversarial test set',
+    fname='fgsm_testset_predset_by_conf_scatter.png'
+)
+
+pred_set_by_conf_scatter(
+    pred_sets=pgd_prediction_sets, conf=pgd_test_labels_dict['confidences'], cov=pgd_empirical_coverage,
+    title='RAPS CP in the PGD adversarial test set',
+    fname='pgd_testset_predset_by_conf_scatter.png'
+)
+
+print(f'Saved plots from results block 3 to {FIG_DIR}')
+
+def cp_by_adversarial_scatter(cp_pred_sets, adv_pred_sets, cp_cov, adv_cov, title, fname):
+    cp_pred_set_len = np.sum(cp_pred_sets, axis=1)
+    adv_pred_set_len = np.sum(adv_pred_sets, axis=1)
+    max_val = max(np.max(adv_pred_set_len), np.max(cp_pred_set_len))
+    ticks = np.arange(1, max_val + 1)
+    plt.plot([0, max_val], [0, max_val], linestyle='--', color='black', alpha=0.75, zorder=0)
+    plt.scatter(x=cp_pred_set_len, y=adv_pred_set_len, color='tab:blue', edgecolor='black', alpha=0.05, zorder=1)
+    plt.xticks(ticks)
+    plt.yticks(ticks)
+    plt.title(f'{title}\n(CP unperturbed cov {cp_cov} vs. CP adversarial cov {adv_cov})')
+    plt.xlabel("CP unperturbed prediction set size")
+    plt.ylabel("CP adversarial prediction set size")
+    plt.savefig(f'{FIG_DIR}/{fname}', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
     plt.show()
 
-pred_set_sizes_hist(fgsm_prediction_sets, fgsm_empirical_coverage)
+cp_by_adversarial_scatter(
+    cp_pred_sets=prediction_sets, adv_pred_sets=fgsm_prediction_sets, 
+    cp_cov=empirical_coverage, adv_cov=fgsm_empirical_coverage,
+    title='CP unperturbed vs. CP FGSM adversarial prediction set sizes',
+    fname='cp_vs_fgsm_set_size.png'
+)
 
+cp_by_adversarial_scatter(
+    cp_pred_sets=prediction_sets, adv_pred_sets=pgd_prediction_sets, 
+    cp_cov=empirical_coverage, adv_cov=pgd_empirical_coverage,
+    title='CP unperturbed vs. CP PGD adversarial prediction set sizes',
+    fname='cp_vs_pgd_set_size.png'
+)
 # %%
 
