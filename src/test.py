@@ -204,33 +204,87 @@ pred_set_by_conf_scatter(
 
 print(f'Saved plots from results block 3 to {FIG_DIR}')
 
-def cp_by_adversarial_scatter(cp_pred_sets, adv_pred_sets, cp_cov, adv_cov, title, fname):
+def cp_by_adversarial_scatter(cp_pred_sets, adv_pred_sets, cp_cov, adv_cov, title, fname, xlab='Unperturbed CP prediction set size', ylab='Adversarial CP prediction set size'):
     cp_pred_set_len = np.sum(cp_pred_sets, axis=1)
     adv_pred_set_len = np.sum(adv_pred_sets, axis=1)
-    max_val = max(np.max(adv_pred_set_len), np.max(cp_pred_set_len))
-    ticks = np.arange(1, max_val + 1)
-    plt.plot([0, max_val], [0, max_val], linestyle='--', color='black', alpha=0.75, zorder=0)
+    adv_max_val = np.max(adv_pred_set_len) 
+    cp_max_val = np.max(cp_pred_set_len)
+    plt.plot([0, cp_max_val], [0, adv_max_val], linestyle='--', color='black', alpha=0.5, zorder=0)
     plt.scatter(x=cp_pred_set_len, y=adv_pred_set_len, color='tab:blue', edgecolor='black', alpha=0.05, zorder=1)
-    plt.xticks(ticks)
-    plt.yticks(ticks)
-    plt.title(f'{title}\n(CP unperturbed cov {cp_cov} vs. CP adversarial cov {adv_cov})')
-    plt.xlabel("CP unperturbed prediction set size")
-    plt.ylabel("CP adversarial prediction set size")
+    plt.xticks(np.arange(1, cp_max_val + 1))
+    plt.yticks(np.arange(1, adv_max_val + 1))
+    plt.title(f'{title}\n(Coverage {cp_cov} vs. {adv_cov})')
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+    plt.savefig(f'{FIG_DIR}/{fname}', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
+    plt.show()
+
+def cp_by_adversarial_bp(cp_pred_sets, adv_pred_sets, cp_cov, adv_cov, title, fname, xlab='Unperturbed CP prediction set size', ylab='Adversarial CP prediction set size'):
+    cp_pred_set_len = np.sum(cp_pred_sets, axis=1)
+    adv_pred_set_len = np.sum(adv_pred_sets, axis=1)
+    adv_max_val = np.max(adv_pred_set_len) 
+    cp_max_val = np.max(cp_pred_set_len)
+    bp_df = pd.DataFrame(EasyDict(cp_pred_set_len=cp_pred_set_len, adv_pred_set_len=adv_pred_set_len))
+    boxprops = dict(linewidth=2, color='tab:blue', edgecolor='black')
+    sns.set_style('whitegrid')
+    sns.boxplot(x='cp_pred_set_len', y='adv_pred_set_len', data=bp_df, boxprops=boxprops)
+    sns.stripplot(x='cp_pred_set_len', y='adv_pred_set_len', data=bp_df, color='tab:orange', edgecolor='black', alpha=0.5, size=4, jitter=0.3)
+    plt.plot([0, cp_max_val], [0, adv_max_val], linestyle='--', color='black', alpha=0.5, zorder=0)
+    plt.xticks(np.arange(1, cp_max_val + 1))
+    plt.yticks(np.arange(1, adv_max_val + 1))
+    plt.title(f'{title}\n(Coverage {cp_cov} vs. {adv_cov})')
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
     plt.savefig(f'{FIG_DIR}/{fname}', format='png', dpi=100, bbox_inches="tight", pad_inches=0.2)
     plt.show()
 
 cp_by_adversarial_scatter(
     cp_pred_sets=prediction_sets, adv_pred_sets=fgsm_prediction_sets, 
     cp_cov=empirical_coverage, adv_cov=fgsm_empirical_coverage,
-    title='CP unperturbed vs. CP FGSM adversarial prediction set sizes',
+    title='Unperturbed vs. FGSM adversarial CP prediction set sizes',
+    xlab='Unperturbed CP prediction set size', ylab='FGSM adversarial CP prediction set size',
     fname='cp_vs_fgsm_set_size.png'
 )
 
 cp_by_adversarial_scatter(
     cp_pred_sets=prediction_sets, adv_pred_sets=pgd_prediction_sets, 
     cp_cov=empirical_coverage, adv_cov=pgd_empirical_coverage,
-    title='CP unperturbed vs. CP PGD adversarial prediction set sizes',
+    title='Unperturbed vs. PGD adversarial CP prediction set sizes',
+    xlab='Unperturbed CP prediction set size', ylab='PGD adversarial CP prediction set size',
     fname='cp_vs_pgd_set_size.png'
 )
+
+cp_by_adversarial_scatter(
+    cp_pred_sets=fgsm_prediction_sets, adv_pred_sets=pgd_prediction_sets, 
+    cp_cov=fgsm_empirical_coverage, adv_cov=pgd_empirical_coverage,
+    title='FGSM vs. PGD adversarial CP prediction set sizes',
+    xlab='FGSM adversarial CP prediction set size', ylab='PGD adversarial CP prediction set size',
+    fname='fgsm_vs_pgd_set_size.png'
+)
+
+cp_by_adversarial_bp(
+    cp_pred_sets=prediction_sets, adv_pred_sets=fgsm_prediction_sets, 
+    cp_cov=empirical_coverage, adv_cov=fgsm_empirical_coverage,
+    title='Unperturbed vs. FGSM adversarial CP prediction set sizes',
+    xlab='Unperturbed CP prediction set size', ylab='FGSM adversarial CP prediction set size',
+    fname='cp_vs_fgsm_set_size_bp.png'
+)
+
+cp_by_adversarial_bp(
+    cp_pred_sets=prediction_sets, adv_pred_sets=pgd_prediction_sets, 
+    cp_cov=empirical_coverage, adv_cov=pgd_empirical_coverage,
+    title='Unperturbed vs. PGD adversarial CP prediction set sizes',
+    xlab='Unperturbed CP prediction set size', ylab='PGD adversarial CP prediction set size',
+    fname='cp_vs_pgd_set_size_bp.png'
+)
+
+cp_by_adversarial_bp(
+    cp_pred_sets=fgsm_prediction_sets, adv_pred_sets=pgd_prediction_sets, 
+    cp_cov=fgsm_empirical_coverage, adv_cov=pgd_empirical_coverage,
+    title='FGSM vs. PGD adversarial CP prediction set sizes',
+    xlab='FGSM adversarial CP prediction set size', ylab='PGD adversarial CP prediction set size',
+    fname='fgsm_vs_pgd_set_size_bp.png'
+)
+
 # %%
 
