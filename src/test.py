@@ -17,6 +17,7 @@ from cleverhans.tf2.attacks.projected_gradient_descent import projected_gradient
 from cleverhans.tf2.attacks.fast_gradient_method import fast_gradient_method
 import tensorflow as tf
 import seaborn as sns
+from tqdm import tqdm
 
 # Hyperparameters
 BATCH_SIZE = 32 # was 128
@@ -119,7 +120,7 @@ logits_model.compile(optimizer=Adam(lr=ALPHA), loss=loss_fn, metrics=['accuracy'
 
 # %%
 # FGSM attack
-fgsm_test_ds = test_ds.unbatch().take(32).map(
+fgsm_test_ds = test_ds.unbatch().map(
     lambda x, y: (tf.squeeze(fast_gradient_method(
         logits_model, tf.expand_dims(x, axis=0), 
         eps=0.01, norm=np.inf, targeted=False
@@ -128,7 +129,7 @@ fgsm_test_ds = test_ds.unbatch().take(32).map(
 
 # %%
 # PGD attack
-pgd_test_ds = test_ds.unbatch().take(32).map(
+pgd_test_ds = test_ds.unbatch().map(
     lambda x, y: (tf.squeeze(projected_gradient_descent(
         logits_model, tf.cast(tf.expand_dims(x, axis=0), tf.float32), 
         eps=0.01, eps_iter=0.01, nb_iter=5,
@@ -393,7 +394,9 @@ plot_random_sample(
 )
 
 # %%
-for i in range(5, 100, 5):
+print(f'Saved plots from results block 3 to {FIG_DIR}')
+
+for i in tqdm(range(5, 100, 5), total=range(5, 100, 5)):
     plot_random_sample(
         test_ds, fgsm_test_ds, pgd_test_ds, 
         prediction_sets, fgsm_prediction_sets, pgd_prediction_sets, 
