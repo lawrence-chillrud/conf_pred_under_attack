@@ -4,7 +4,7 @@
 # Description: Prep CIFAR-100 datasets
 import tensorflow as tf
 
-def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8, cache=False):
+def prep_data(train_ds, cal_ds, val_ds, test_ds, batch_size=8):
 
     def preprocess(x):
         # normalize

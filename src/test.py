@@ -119,30 +119,26 @@ logits_model.compile(optimizer=Adam(lr=ALPHA), loss=loss_fn, metrics=['accuracy'
 
 # %%
 # FGSM attack
-fgsm_test_ds = test_ds.unbatch().take(BATCH_SIZE*10).map(
+fgsm_test_ds = test_ds.unbatch().take(32).map(
     lambda x, y: (tf.squeeze(fast_gradient_method(
         logits_model, tf.expand_dims(x, axis=0), 
         eps=0.01, norm=np.inf, targeted=False
     )), y)
-).batch(BATCH_SIZE)
+).batch(32)
 
 # %%
 # PGD attack
-pgd_test_ds = test_ds.unbatch().take(BATCH_SIZE*3).map(
+pgd_test_ds = test_ds.unbatch().take(32).map(
     lambda x, y: (tf.squeeze(projected_gradient_descent(
-        logits_model, tf.expand_dims(x, axis=0), 
-        eps=0.01, eps_iter=0.01, nb_iter=20,
+        logits_model, tf.cast(tf.expand_dims(x, axis=0), tf.float32), 
+        eps=0.01, eps_iter=0.01, nb_iter=5,
         norm=np.inf, targeted=False
     )), y)
-).batch(BATCH_SIZE)
+).batch(32)
 
 # %%
 fgsm_test_smx, fgsm_test_labels_dict = extract_softmax_scores(model, fgsm_test_ds)
-#fgsm_test_df = pd.DataFrame.from_dict(fgsm_test_labels_dict)
-
-# %%
 pgd_test_smx, pgd_test_labels_dict = extract_softmax_scores(model, pgd_test_ds)
-#pgd_test_df = pd.DataFrame.from_dict(pgd_test_labels_dict)
 
 # %%
 fgsm_test_calib_fig = reliability_diagram(
@@ -201,8 +197,6 @@ pred_set_by_conf_scatter(
     title='RAPS CP in the PGD adversarial test set',
     fname='pgd_testset_predset_by_conf_scatter.png'
 )
-
-print(f'Saved plots from results block 3 to {FIG_DIR}')
 
 def cp_by_adversarial_scatter(cp_pred_sets, adv_pred_sets, cp_cov, adv_cov, title, fname, xlab='Unperturbed CP prediction set size', ylab='Adversarial CP prediction set size'):
     cp_pred_set_len = np.sum(cp_pred_sets, axis=1)
@@ -286,5 +280,78 @@ cp_by_adversarial_bp(
     fname='fgsm_vs_pgd_set_size_bp.png'
 )
 
-# %%
+print(f'Saved plots from results block 3 to {FIG_DIR}')
 
+# %%
+def plot_random_sample(
+    test_ds, fgsm_ds, pgd_ds, 
+    test_preds, fgsm_preds, pgd_preds, 
+    test_smxs, fgsm_smxs, pgd_smxs,
+    skip=100, n_examples=10
+):
+    def un_preprocess(x):
+        return tf.cast(tf.multiply(tf.cast(x, tf.float16), 255.), tf.int32)
+    
+    test_ds = test_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
+    fgsm_ds = fgsm_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
+    pgd_ds = pgd_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
+    test_p = test_preds[skip:(skip + n_examples), :]
+    fgsm_p = fgsm_preds[skip:(skip + n_examples), :]
+    pgd_p = pgd_preds[skip:(skip + n_examples), :]
+    test_s = test_smxs[skip:(skip + n_examples), :]
+    fgsm_s = fgsm_smxs[skip:(skip + n_examples), :]
+    pgd_s = pgd_smxs[skip:(skip + n_examples), :]
+
+    ds = tf.data.Dataset.zip((test_ds, fgsm_ds, pgd_ds))
+
+    fig, ax = plt.subplots(nrows=n_examples, ncols=3, figsize=(12, 8), gridspec_kw={'width_ratios': [1, 1, 1], 'height_ratios': np.ones(n_examples, int).tolist()})
+    for i, (og_sample, fgsm_sample, pgd_sample) in enumerate(ds):
+        og_img, og_label = og_sample[0].numpy(), og_sample[1].numpy()
+        fgsm_img = fgsm_sample[0].numpy()
+        pgd_img = pgd_sample[0].numpy()
+
+        og_lab_hr = human_readable_labels[og_label]
+
+        hrl = np.array(human_readable_labels)
+
+        og_idx = test_p[i, :]
+        og_pred_set = hrl[og_idx]
+        og_s = np.round(test_s[i, :][og_idx], 2)
+        og_dict = dict(zip(og_pred_set, og_s))
+
+        fgsm_idx = fgsm_p[i, :]
+        fgsm_pred_set = hrl[fgsm_idx]
+        fgsm_s = np.round(fgsm_s[i, :][fgsm_idx], 2)
+        fgsm_dict = dict(zip(fgsm_pred_set, fgsm_s))
+
+        pgd_idx = pgd_p[i, :]
+        pgd_pred_set = hrl[pgd_idx]
+        pgd_s = np.round(pgd_s[i, :][pgd_idx], 2)
+        pgd_dict = dict(zip(pgd_pred_set, pgd_s))
+
+        # Loop over each column in the row
+        ax[i, 0].imshow(og_img)
+        ax[i, 0].set_title(f'Unperturbed image, y = {og_lab_hr}\nCP pred set = {og_dict}')
+
+        ax[i, 1].imshow(fgsm_img)
+        ax[i, 1].set_title(f'FGSM attack\nCP pred set = {fgsm_dict}')
+
+        ax[i, 2].imshow(pgd_img)
+        ax[i, 2].set_title(f'PGD attack\nCP pred set = {pgd_dict}')
+
+        for j in range(3):
+            ax[i, j].set_xticks([])
+            ax[i, j].set_yticks([])
+        fig.suptitle(f'CP behaviour on {n_examples} random test set examples')
+
+    #fig.suptitle('Random test set images', fontsize=16)
+    fig.savefig(f'{FIG_DIR}/test_set_images_skip{skip}_n{n_examples}.png', format='png', dpi=200, bbox_inches="tight", pad_inches=0.2)
+    plt.show()
+
+plot_random_sample(
+    test_ds, fgsm_test_ds, pgd_test_ds, 
+    prediction_sets, fgsm_prediction_sets, pgd_prediction_sets, 
+    test_smx, fgsm_test_smx, pgd_test_smx,
+    skip=0, n_examples=5
+)
+# %%
