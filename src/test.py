@@ -19,6 +19,9 @@ import tensorflow as tf
 import seaborn as sns
 from tqdm import tqdm
 
+gpus = tf.config.list_physical_devices('GPU')
+if gpus: tf.config.set_visible_devices(gpus[3:], 'GPU') # use GPUs 3, 4, 5 on Zeus
+
 # Hyperparameters
 BATCH_SIZE = 32 # was 128
 ALPHA = 1e-3 # was 1e-4
@@ -140,6 +143,11 @@ pgd_test_ds = test_ds.unbatch().map(
 # %%
 fgsm_test_smx, fgsm_test_labels_dict = extract_softmax_scores(model, fgsm_test_ds)
 pgd_test_smx, pgd_test_labels_dict = extract_softmax_scores(model, pgd_test_ds)
+
+np.save('/home/lawrence/conf_pred_under_attack/output/attacks/fgsm_test_smx.npy', fgsm_test_smx)
+np.save('/home/lawrence/conf_pred_under_attack/output/attacks/pgd_test_smx.npy', pgd_test_smx)
+np.save('/home/lawrence/conf_pred_under_attack/output/attacks/fgsm_test_labels_dict.npy', fgsm_test_labels_dict)
+np.save('/home/lawrence/conf_pred_under_attack/output/attacks/pgd_test_labels_dict.npy', pgd_test_labels_dict)
 
 # %%
 fgsm_test_calib_fig = reliability_diagram(
@@ -302,7 +310,7 @@ def plot_random_sample(
         if n_left > 0:
             d_visible = d_sorted[4:]
             d_discarded = d_sorted[:4]
-            msg = '...and {} others'.format(n_left)
+            msg = '...and {} others'.format(n_left + 4)
             if true_lab in dict(d_discarded).keys():
                 msg += ' (including y!)'
             else: 
@@ -396,7 +404,7 @@ plot_random_sample(
 # %%
 print(f'Saved plots from results block 3 to {FIG_DIR}')
 
-for i in tqdm(range(5, 100, 5), total=range(5, 100, 5)):
+for i in tqdm(range(5, 100, 5), total=len(range(5, 100, 5))):
     plot_random_sample(
         test_ds, fgsm_test_ds, pgd_test_ds, 
         prediction_sets, fgsm_prediction_sets, pgd_prediction_sets, 
