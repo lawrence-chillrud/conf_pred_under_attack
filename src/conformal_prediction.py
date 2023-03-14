@@ -13,7 +13,7 @@ def RAPS_conformal_prediction(cal_smx, cal_labels, val_smx, val_labels, n_classe
     cal_L = np.where(cal_pi == cal_labels[:,None])[1]
     cal_scores = cal_srt_reg.cumsum(axis=1)[np.arange(n_cal),cal_L] - np.random.rand(n_cal)*cal_srt_reg[np.arange(n_cal),cal_L]
     # Get the score quantile
-    qhat = np.quantile(cal_scores, np.ceil((n_cal+1)*(1-alpha))/n_cal, interpolation='higher')
+    qhat = np.quantile(cal_scores, np.ceil((n_cal+1)*(1-alpha))/n_cal, method='higher')
     # Deploy
     n_val = val_smx.shape[0]
     val_pi = val_smx.argsort(1)[:,::-1]
@@ -26,3 +26,4 @@ def RAPS_conformal_prediction(cal_smx, cal_labels, val_smx, val_labels, n_classe
     empirical_coverage = prediction_sets[np.arange(n_val),val_labels].mean()
     print(f"The empirical coverage is: {empirical_coverage}")
     print(f"The quantile is: {qhat}")
+    return empirical_coverage, qhat, prediction_sets

@@ -5,7 +5,7 @@
 # %%
 from download_cifar100 import download_cifar100_as_ds
 from prep_data import prep_data
-from models import init_model
+from models import *
 from keras.optimizers import Adam
 from extract_softmax_scores import extract_softmax_scores
 import pandas as pd
@@ -13,6 +13,9 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 from reliability_diagrams import *
 from conformal_prediction import RAPS_conformal_prediction
+from cleverhans.tf2.attacks.projected_gradient_descent import projected_gradient_descent
+from cleverhans.tf2.attacks.fast_gradient_method import fast_gradient_method
+import tensorflow as tf
 
 # Hyperparameters
 BATCH_SIZE = 32 # was 128
@@ -73,17 +76,87 @@ reliability_diagram(
 )
 
 # %%
-RAPS_conformal_prediction(
+empirical_coverage, qhat, prediction_sets = RAPS_conformal_prediction(
     cal_smx=cal_smx, cal_labels=cal_labels_dict['true_labels'],
-    val_smx=test_smx, val_labels=test_labels_dict['true_labels']
+    val_smx=test_smx, val_labels=test_labels_dict['true_labels'],
+    lam_reg=0.01, k_reg=5, rand=False
+)
+
+def pred_set_sizes_hist(prediction_sets, cov):
+    sizes = np.sum(prediction_sets, axis=1)
+    bins = np.arange(np.min(sizes), np.max(sizes)+1)
+    plt.hist(sizes, bins=bins, edgecolor='black')
+    plt.xlabel('RAPS CP prediction set size')
+    plt.ylabel('Frequency')
+    plt.title(f'Unperturbed test set empirical coverage: {cov}')
+    plt.show()
+
+pred_set_sizes_hist(prediction_sets, empirical_coverage)
+
+# TODO PLOT IMAGES WITH THEIR PREDICTION SETS
+
+# %%
+# Construct adversarial attacks
+
+# Load in model again for logit output
+logits_model = load_logit_model(f'{OUTPUT_DIR}/weights.h5')
+loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+logits_model.compile(optimizer=Adam(lr=ALPHA), loss=loss_fn, metrics=['accuracy'])
+
+# %%
+# FGSM attack
+fgsm_test_ds = test_ds.unbatch().take(BATCH_SIZE*10).map(
+    lambda x, y: (tf.squeeze(fast_gradient_method(
+        logits_model, tf.expand_dims(x, axis=0), 
+        eps=0.01, norm=np.inf, targeted=False
+    )), y)
+).batch(BATCH_SIZE)
+
+# %%
+# PGD attack
+pgd_test_ds = test_ds.map(
+    lambda x, y: (tf.squeeze(projected_gradient_descent(
+        logits_model, tf.expand_dims(x, axis=0), 
+        eps=0.01, eps_iter=0.01, nb_iter=20,
+        norm=np.inf, loss_fn=loss_fn, targeted=False
+    )), y)
 )
 
 # %%
-# calibration_plot_data = OrderedDict()
-# calibration_plot_data['Calibration set'] = cal_labels_dict
-# calibration_plot_data['Unperturbed test set performance (no conformal prediction)'] = test_labels_dict
-# reliability_diagrams(
-#     calibration_plot_data,
-#     num_bins=10, draw_ece=True, draw_bin_importance="alpha",
-#     figsize=(6, 6), dpi=100, return_fig=True
-# )
+fgsm_test_smx, fgsm_test_labels_dict = extract_softmax_scores(model, fgsm_test_ds)
+fgsm_test_df = pd.DataFrame.from_dict(fgsm_test_labels_dict)
+
+# %%
+pgd_test_smx, pgd_test_labels_dict = extract_softmax_scores(model, pgd_test_ds)
+pgd_test_df = pd.DataFrame.from_dict(pgd_test_labels_dict)
+
+# %%
+reliability_diagram(
+    fgsm_test_labels_dict['true_labels'], 
+    fgsm_test_labels_dict['pred_labels'], 
+    fgsm_test_labels_dict['confidences'],
+    num_bins=10, draw_ece=True,
+    draw_bin_importance="alpha", draw_averages=True,
+    title='FGSM Adversarial test set performance (no conformal prediction)', figsize=(6, 6), dpi=100, return_fig=True
+)
+
+# %%
+fgsm_empirical_coverage, fgsm_qhat, fgsm_prediction_sets = RAPS_conformal_prediction(
+    cal_smx=cal_smx, cal_labels=cal_labels_dict['true_labels'],
+    val_smx=fgsm_test_smx, val_labels=fgsm_test_labels_dict['true_labels'],
+    lam_reg=0.01, k_reg=5, rand=False
+)
+
+def pred_set_sizes_hist(prediction_sets, cov):
+    sizes = np.sum(prediction_sets, axis=1)
+    bins = np.arange(np.min(sizes), np.max(sizes)+1)
+    plt.hist(sizes, bins=bins, edgecolor='black')
+    plt.xlabel('RAPS CP prediction set size')
+    plt.ylabel('Frequency')
+    plt.title(f'Unperturbed test set empirical coverage: {cov}')
+    plt.show()
+
+pred_set_sizes_hist(fgsm_prediction_sets, fgsm_empirical_coverage)
+
+# %%
+
