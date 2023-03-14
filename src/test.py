@@ -292,6 +292,38 @@ def plot_random_sample(
     def un_preprocess(x):
         return tf.cast(tf.multiply(tf.cast(x, tf.float16), 255.), tf.int32)
     
+    def clean_dict(d, true_lab):
+        # sort
+        d_sorted = sorted(d.items(), key=lambda x: x[1], reverse=True)
+
+        # truncate
+        n_left = len(d_sorted) - 4
+        if n_left > 0:
+            d_visible = d_sorted[4:]
+            d_discarded = d_sorted[:4]
+            msg = '...and {} others'.format(n_left)
+            if true_lab in dict(d_discarded).keys():
+                msg += ' (including y!)'
+            else: 
+                if true_lab not in dict(d_visible).keys():
+                    msg += ' (excluding y)'
+            
+            d_visible.append(msg) 
+            d_sorted = d_visible
+        
+        return d_sorted
+
+    def set_ax_edge(ax, color='black'):
+        ax.spines['top'].set_linewidth(3)
+        ax.spines['bottom'].set_linewidth(3)
+        ax.spines['left'].set_linewidth(3)
+        ax.spines['right'].set_linewidth(3)
+        ax.spines['top'].set_color(color)
+        ax.spines['bottom'].set_color(color)
+        ax.spines['left'].set_color(color)
+        ax.spines['right'].set_color(color)
+        ax.grid(False)
+
     test_ds = test_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
     fgsm_ds = fgsm_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
     pgd_ds = pgd_ds.unbatch().skip(skip).take(n_examples).map(lambda x, y: (un_preprocess(x), y))
@@ -304,7 +336,7 @@ def plot_random_sample(
 
     ds = tf.data.Dataset.zip((test_ds, fgsm_ds, pgd_ds))
 
-    fig, ax = plt.subplots(nrows=n_examples, ncols=3, figsize=(20, 8))#, gridspec_kw={'width_ratios': [1, 1, 1], 'height_ratios': np.ones(n_examples, int).tolist()})
+    fig, ax = plt.subplots(nrows=n_examples, ncols=3, figsize=(10, 15))#, gridspec_kw={'width_ratios': [1, 1, 1], 'height_ratios': np.ones(n_examples, int).tolist()})
     for i, (og_sample, fgsm_sample, pgd_sample) in enumerate(ds):
         og_img, og_label = og_sample[0].numpy(), og_sample[1].numpy()
         fgsm_img = fgsm_sample[0].numpy()
@@ -317,32 +349,37 @@ def plot_random_sample(
         og_idx = test_p[i, :]
         og_pred_set = hrl[og_idx]
         og_s = np.round(test_s[i, :][og_idx], 2)
-        og_dict = dict(zip(og_pred_set, og_s))
+        og_dict = clean_dict(dict(zip(og_pred_set, og_s)), og_lab_hr)
 
         fgsm_idx = fgsm_p[i, :]
         fgsm_pred_set = hrl[fgsm_idx]
         fgsm_sm = np.round(fgsm_s[i, :][fgsm_idx], 2)
-        fgsm_dict = dict(zip(fgsm_pred_set, fgsm_sm))
+        fgsm_dict = clean_dict(dict(zip(fgsm_pred_set, fgsm_sm)), og_lab_hr)
 
         pgd_idx = pgd_p[i, :]
         pgd_pred_set = hrl[pgd_idx]
         pgd_sm = np.round(pgd_s[i, :][pgd_idx], 2)
-        pgd_dict = dict(zip(pgd_pred_set, pgd_sm))
+        pgd_dict = clean_dict(dict(zip(pgd_pred_set, pgd_sm)), og_lab_hr)
 
         # Loop over each column in the row
         ax[i, 0].imshow(og_img)
-        ax[i, 0].set_title(f'Unperturbed image, y = {og_lab_hr}\nCP pred set = {og_dict}')
+        set_ax_edge(ax[i, 0])
+        ax[i, 0].set_title(f'Original, y = {og_lab_hr}\n{og_dict}\n\n', fontsize=10)
 
         ax[i, 1].imshow(fgsm_img)
-        ax[i, 1].set_title(f'FGSM attack\nCP pred set = {fgsm_dict}')
+        set_ax_edge(ax[i, 1], 'tab:orange')
+        ax[i, 1].set_title(f'FGSM attack\n\n{fgsm_dict}\n', fontsize=10, color='tab:orange')
 
         ax[i, 2].imshow(pgd_img)
-        ax[i, 2].set_title(f'PGD attack\nCP pred set = {pgd_dict}')
+        set_ax_edge(ax[i, 2], 'tab:blue')
+        ax[i, 2].set_title(f'PGD attack\n\n\n{pgd_dict}', fontsize=10, color='tab:blue')
 
         for j in range(3):
             ax[i, j].set_xticks([])
             ax[i, j].set_yticks([])
-        fig.suptitle(f'CP behaviour on {n_examples} random test set examples')
+    
+    #fig.suptitle(f'CP behaviour on {n_examples} random test set examples')
+    fig.subplots_adjust(wspace=0.2, hspace=1)
 
     #fig.suptitle('Random test set images', fontsize=16)
     fig.savefig(f'{FIG_DIR}/test_set_images_skip{skip}_n{n_examples}.png', format='png', dpi=200, bbox_inches="tight", pad_inches=0.2)
@@ -354,4 +391,13 @@ plot_random_sample(
     test_smx, fgsm_test_smx, pgd_test_smx,
     skip=0, n_examples=5
 )
+
+# %%
+for i in range(5, 100, 5):
+    plot_random_sample(
+        test_ds, fgsm_test_ds, pgd_test_ds, 
+        prediction_sets, fgsm_prediction_sets, pgd_prediction_sets, 
+        test_smx, fgsm_test_smx, pgd_test_smx,
+        skip=i, n_examples=5
+    )
 # %%
