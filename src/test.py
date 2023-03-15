@@ -393,7 +393,7 @@ def plot_random_sample(
     fig.subplots_adjust(wspace=0.2, hspace=1)
 
     #fig.suptitle('Random test set images', fontsize=16)
-    fig.savefig(f'{FIG_DIR}/test_set_images_skip{skip}_n{n_examples}.png', format='png', dpi=200, bbox_inches="tight", pad_inches=0.2)
+    fig.savefig(f'{FIG_DIR}/example_ims/test_set_images_skip{skip}_n{n_examples}.png', format='png', dpi=200, bbox_inches="tight", pad_inches=0.2)
     plt.show()
 
 plot_random_sample(
