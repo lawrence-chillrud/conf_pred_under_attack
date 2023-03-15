@@ -301,21 +301,23 @@ def plot_random_sample(
     def un_preprocess(x):
         return tf.cast(tf.multiply(tf.cast(x, tf.float16), 255.), tf.int32)
     
-    def clean_dict(d, true_lab):
+    def clean_dict(d, true_lab, n_include=3):
         # sort
         d_sorted = sorted(d.items(), key=lambda x: x[1], reverse=True)
 
         # truncate
-        n_left = len(d_sorted) - 4
+        n_left = len(d_sorted) - n_include
         if n_left > 0:
-            d_visible = d_sorted[4:]
-            d_discarded = d_sorted[:4]
-            msg = '...and {} others'.format(n_left + 4)
+            d_visible = d_sorted[:n_include]
+            d_discarded = d_sorted[n_include:]
+            suffix = 'others'
+            if n_left == 1: suffix = 'other'
+            msg = f'& {n_left} {suffix}'
             if true_lab in dict(d_discarded).keys():
-                msg += ' (including y!)'
+                msg += ' (y present)'
             else: 
                 if true_lab not in dict(d_visible).keys():
-                    msg += ' (excluding y)'
+                    msg += ' (y missing)'
             
             d_visible.append(msg) 
             d_sorted = d_visible
